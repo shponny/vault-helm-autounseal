@@ -1,0 +1,57 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: prom-config
+data:
+  alert.rules.yml: |-
+    groups:
+      - name: alert.rules
+        rules:
+          - alert: VaultSealed
+            expr: (count by (k8s_namespace, k8s_pod_name, job) (up{vault_seal_status=~"true"})) == 1
+            for: 1m
+            labels:
+              severity: "critical"
+            annotations:
+              summary: "Node {{ $labels.k8s_pod_name }} is sealed!"
+              description: "{{ $labels.k8s_pod_name }} of cluster {{ $labels.job }} has been sealed for more than 1 minutes."
+  prometheus.yml: |-
+    global:
+      scrape_interval:     5s 
+      evaluation_interval: 5s
+    rule_files:
+      - "alert.rules.yml"
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets:
+                # ----------- REPLACE -----------------
+                - "alertmanager.<your_namespace>.svc.cluster.local:9093"
+    scrape_configs: 
+      # ----------- REPLACE -----------------
+      - job_name: <vault_helm_release_name>
+        metrics_path: /v1/sys/metrics
+        scrape_interval: 10s
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              own_namespace: true
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_vault_sealed]
+            action: replace
+            target_label: vault_seal_status
+          - source_labels: [__meta_kubernetes_namespace]
+            action: replace
+            target_label: k8s_namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            action: replace
+            target_label: k8s_pod_name
+          - source_labels: [__address__]
+            action: replace
+            regex: ([^:]+)(?::\d+)?
+            replacement: ${1}:8200
+            target_label: __address__
+          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_instance]
+            action: keep
+            # ----------- REPLACE -----------------
+            regex: <vault_helm_release_name>

@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: EventSource
+metadata:
+  name: k8sobject
+spec:
+  resource:
+    vault-sealed:
+      namespace: 4dep-ops
+      group: ""
+      version: v1
+      resource: pods
+      eventTypes:
+        - UPDATE
+        - ADD
+      filter:
+        labels:
+          - key: vault-sealed
+            operation: ==
+            value: "true"
+          - key: app.kubernetes.io/instance
+            operation: ==
+            value: "vault"

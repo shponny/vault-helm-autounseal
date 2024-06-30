@@ -1,0 +1,16 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: alertmanager-config
+data:
+  alertmanager.yml: |-
+    global:
+      resolve_timeout: 5m
+    route:
+      receiver: vault-argo-webhook-receiver
+    receivers:
+        - name: vault-argo-webhook-receiver
+          # Replace
+          webhook_configs:
+            - url: 'https://ext-cluster.example.net/vault-sealed'
+              send_resolved: false

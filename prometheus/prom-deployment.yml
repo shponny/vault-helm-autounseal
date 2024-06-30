@@ -1,0 +1,39 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: prometheus
+  labels:
+    app: prometheus
+    app.kubernetes.io/component: prometheus
+    app.kubernetes.io/instance: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      deployment: prometheus
+  template:
+    metadata:
+      labels:
+        deployment: prometheus
+    spec:
+      restartPolicy: Always
+      serviceAccountName: prometheus
+      containers:
+        - name: prometheus
+          image: prom/prometheus
+          ports:
+            - containerPort: 9090
+              protocol: TCP
+          volumeMounts:
+            - name: prometheus-volume-1
+              mountPath: /prometheus
+            - name: prom-config-volume
+              mountPath: /etc/prometheus/
+          imagePullPolicy: IfNotPresent
+      volumes:
+        - name: prometheus-volume-1
+          emptyDir: {}
+        - name: prom-config-volume
+          configMap:
+            name: prom-config
+            defaultMode: 420

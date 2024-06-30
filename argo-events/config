@@ -1,0 +1,19 @@
+apiVersion: v1
+clusters:
+- cluster:
+    insecure-skip-tls-verify: true
+    server: https://api.example.net:6443
+  name: api-example-net:6443
+contexts:
+- context:
+    cluster: api-example-net:6443
+    namespace: testns
+    user: system:serviceaccount:testns:vault-argo-sa/api-example-net:6443
+  name: testns/api-example-net:6443/system:serviceaccount:testns:vault-argo-sa
+current-context: testns/api-example-net:6443/system:serviceaccount:testns:vault-argo-sa
+kind: Config
+preferences: {}
+users:
+  - name: system:serviceaccount:testns:vault-argo-sa/api-example-net:6443
+    user:
+      token: <REDACTED>

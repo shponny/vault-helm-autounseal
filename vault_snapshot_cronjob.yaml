@@ -1,0 +1,57 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: vault-snapshot-cronjob
+spec:
+  schedule: '@every 12h'
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          volumes:
+            - name: share
+              emptyDir: {}
+          containers:
+            - name: snapshot
+              image: hashicorp/vault
+              imagePullPolicy: IfNotPresent
+              command:
+                - /bin/sh
+                - -ec
+              args:
+                - |
+                  wget https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux-amd64 -O /tmp/jq && chmod +x /tmp/jq
+
+                  export VAULT_TOKEN=$(vault write auth/approle/login role_id=$VAULT_APPROLE_ROLE_ID secret_id=$VAULT_APPROLE_SECRET_ID -format=json | /tmp/jq -r .auth.client_token);
+
+                  vault operator raft snapshot save /share/vault-raft.snap;
+              envFrom:
+                - secretRef:
+                    name: vault-snapshot-agent-token
+              env:
+                - name: VAULT_ADDR
+                  value: 'http://vault-active.vault.svc.cluster.local:8200'
+              volumeMounts:
+                - mountPath: /share
+                  name: share
+            - name: upload
+              image: amazon/aws-cli
+              imagePullPolicy: IfNotPresent
+              command:
+                - /bin/sh
+              args:
+                - -ec
+                - |
+                  until [ -f /share/vault-raft.snap ]; do sleep 5; done;
+
+                  aws --endpoint=$AWS_ENDPOINT s3 cp /share/vault-raft.snap s3://$AWS_S3_BUCKET/vault_raft_$(date +"%Y%m%d_%H%M%S").snap;
+              env:
+                - name: AWS_S3_BUCKET
+                  value: vault
+              envFrom:
+                - secretRef:
+                    name: vaults-snapshot-s3
+              volumeMounts:
+                - mountPath: /share
+                  name: share
+          restartPolicy: OnFailure

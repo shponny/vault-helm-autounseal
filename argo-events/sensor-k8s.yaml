@@ -1,0 +1,69 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Sensor
+metadata:
+  name: vault-sensor
+spec:
+  template:
+    serviceAccountName: argo-sa
+  dependencies:
+  - name: unseal
+    eventSourceName: k8sobject
+    eventName: vault-sealed
+  triggers:
+  - template:
+      name: unseal
+      k8s:
+        group: ""
+        version: v1
+        resource: pods
+        operation: create
+        source:
+          resource:
+            apiVersion: v1
+            kind: Pod
+            metadata:
+              generateName: unseal-
+              labels:
+                app: unseal
+            spec:
+              volumes:
+                - name: vault-keys
+                  secret:
+                    secretName: vault-keys
+                    defaultMode: 420
+              containers:
+              - name: vault-unseal
+                image: hashicorp/vault
+                imagePullPolicy: IfNotPresent
+                env:
+                  - name: POD
+                    value: ""
+                command:
+                  - /bin/bash
+                  - -ec
+                args:
+                  - |
+                    wget https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux-amd64 -O /tmp/jq && chmod +x /tmp/jq
+                    cd
+                    j=0
+                    VAULT_ADDR="${POD}:8200"
+                    PROGRESS=99
+                    sleep 7
+                    echo "Unsealing $POD..."
+                    until [ $PROGRESS -eq 0 ]
+                    do
+                      KEY=$(/tmp/jq --arg j $j -r ".unseal_keys_hex[$j]" /home/vault/vaultkeys/vault.json)
+                      # Unsealing!
+                      PROGRESS=$(vault operator unseal -format=json $KEY | /tmp/jq -j '.progress')
+                      j=$((j+1))
+                    done
+
+                volumeMounts:
+                  - name: vault-keys
+                    mountPath: /home/vault/vaultkeys
+              restartPolicy: Never
+        parameters:
+          - src:
+              dependencyName: unseal
+              dataKey: body.status.podIP
+            dest: spec.containers.0.env.0.value

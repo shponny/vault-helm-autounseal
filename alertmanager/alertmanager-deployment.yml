@@ -1,0 +1,38 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: alertmanager
+  labels:
+    app: alertmanager
+    app.kubernetes.io/component: alertmanager
+    app.kubernetes.io/instance: alertmanager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      deployment: alertmanager
+  template:
+    metadata:
+      labels:
+        deployment: alertmanager
+    spec:
+      volumes:
+        - name: alertmanager-volume-1
+          emptyDir: {}
+        - name: alertmanager-config-volume
+          configMap:
+            name: alertmanager-config
+            defaultMode: 420
+      containers:
+        - name: alertmanager
+          image: prom/alertmanager
+          ports:
+            - containerPort: 9093
+              protocol: TCP
+          volumeMounts:
+            - name: alertmanager-volume-1
+              mountPath: /alertmanager
+            - name: alertmanager-config-volume
+              mountPath: /etc/alertmanager
+          imagePullPolicy: IfNotPresent
+      restartPolicy: Always

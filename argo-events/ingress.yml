@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  labels:
+    sensor-name: webhook
+  name: awx-ingress
+  namespace: vault-unseal
+spec:
+  rules:
+    - host: awx.example.net
+      http:
+        paths:
+          - backend:
+              service:
+                name: webhook-eventsource-svc
+                port:
+                  number: 12000
+            path: /vault-sealed
+            pathType: Prefix
+  tls:
+    - hosts:
+        - awx.example.net
+      secretName: example-net-tls

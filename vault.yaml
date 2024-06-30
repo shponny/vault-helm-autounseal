@@ -1,0 +1,109 @@
+releaseName: vault
+global:
+  enabled: true
+injector:
+  enabled: false
+server:
+  authDelegator:
+    enabled: false
+  dataStorage:
+    size: 5Gi
+  ha:
+    enabled: true
+    raft:
+      enabled: true
+      config: |
+        ui = true
+        log_requests_level = "debug"
+        log_level = "debug"
+        
+        listener "tcp" {
+          tls_disable = 1
+          address = "0.0.0.0:8200"
+          cluster_address = "0.0.0.0:8201"
+          # Enable unauthenticated metrics access (necessary for Prometheus Operator)
+          telemetry {
+            unauthenticated_metrics_access = true
+          }
+        }
+
+        telemetry {
+          prometheus_retention_time = "10s"
+          disable_hostname = true
+        }
+
+        storage "raft" {
+          retry_join {
+            auto_join = "provider=k8s label_selector=\"app.kubernetes.io/name=vault,component=server,app.kubernetes.io/instance={{ .Release.Name }}\" namespace=\"{{ .Release.Namespace }}\""
+            auto_join_scheme = "http"
+          }
+          path = "/vault/data"
+        }
+
+        service_registration "kubernetes" {}
+    replicas: 3
+    disruptionBudget:
+      enabled: true
+      maxUnavailable: 0
+  image:
+    repository: hashicorp/vault
+    tag: 1.15.2
+  ingress:
+    annotations:
+      route.openshift.io/termination: "edge"
+    enabled: true
+    hosts:
+      - host: "vault.example.com"
+    tls:
+      - hosts:
+          - vault.example.com
+        secretName: vault-cert
+  readinessProbe:
+    enabled: true
+    path: /v1/sys/health?standbyok=true&perfstandbyok=true
+  serviceAccount:
+    create: true
+    serviceDiscovery:
+      enabled: true
+  standalone:
+    enabled: false
+    # Using Raft even in standalone
+    config: |
+      ui = true
+      log_requests_level = "debug"
+      log_level = "debug"
+      
+      listener "tcp" {
+        tls_disable = 1
+        address = "0.0.0.0:8200"
+        cluster_address = "0.0.0.0:8201"
+        # Enable unauthenticated metrics access (necessary for Prometheus Operator)
+        telemetry {
+          unauthenticated_metrics_access = true
+        }
+      }
+
+      telemetry {
+        prometheus_retention_time = "10s"
+        disable_hostname = true
+      }
+
+      storage "raft" {
+        retry_join {
+          auto_join = "provider=k8s label_selector=\"app.kubernetes.io/name=vault,component=server,app.kubernetes.io/instance={{ .Release.Name }}\" namespace=\"{{ .Release.Namespace }}\""
+          auto_join_scheme = "http"
+        }
+        path = "/vault/data"
+      }
+
+      service_registration "kubernetes" {}
+  # Use following 'statefulSet' values for Openshift without setting the 'global.openshift=true'
+  # That's in case if we want to use Ingress instead of Routes on OpenShift (for example, to pass certificate secret)
+  # For Kubernetes - remove this block
+  statefulSet:
+    securityContext:
+      pod:
+        runAsNonRoot: true
+      container: {}
+ui:
+  enabled: true

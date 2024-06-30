@@ -1,0 +1,76 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Sensor
+metadata:
+  name: webhook
+spec:
+  template:
+    serviceAccountName: argo-sa
+  dependencies:
+  - name: unseal
+    eventSourceName: webhook
+    eventName: vault-sealed
+  triggers:
+  - template:
+      name: unseal
+      k8s:
+        group: ""
+        version: v1
+        resource: pods
+        operation: create
+        source:
+          resource:
+            apiVersion: v1
+            kind: Pod
+            metadata:
+              generateName: unseal-
+              labels:
+                app: unseal
+            spec:
+              volumes:
+                - name: vault-keys
+                  secret:
+                    secretName: vault-keys
+                    defaultMode: 420
+                - name: kubeconfig-vault
+                  secret:
+                    secretName: kubeconfig-vault
+                    defaultMode: 420
+              containers:
+              - name: kubectl-unseal
+                image: bitnami/kubectl
+                imagePullPolicy: IfNotPresent
+                env:
+                  - name: PODS
+                    value: []
+                command:
+                  - /bin/bash
+                  - -ec
+                args:
+                  - |
+                    j=0
+                    PROGRESS=99
+                    PODSARRAY=($(echo "$PODS" | jq -r '.[]'))
+                    sleep 7
+                    for POD in ${PODSARRAY[@]}
+                    do
+                      echo "Unsealing $POD..."
+                      until [ $PROGRESS -eq 0 ]
+                      do
+                        KEY=$(jq --arg j $j -r ".unseal_keys_hex[$j]" /tmp/vaultkeys/vault.json)
+                        # Unsealing!
+                        PROGRESS=$(kubectl exec $POD -- vault operator unseal -format=json $KEY | jq -j '.progress')
+                        j=$((j+1))
+                      done
+                    done
+
+                volumeMounts:
+                  - name: vault-keys
+                    mountPath: /tmp/vaultkeys
+                  - name: kubeconfig-vault
+                    mountPath: /.kube
+              restartPolicy: Never
+        parameters:
+          - src:
+              dependencyName: unseal
+              dataKey: body.alerts.#.labels.k8s_pod_name
+            dest: spec.containers.0.env.0.value
